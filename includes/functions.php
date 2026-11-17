@@ -138,16 +138,45 @@ function pmpro_ml_handle_wp_login_submission() {
 add_action( 'login_form_pmpro_magic_login', 'pmpro_ml_handle_wp_login_submission' );
 
 /**
- * Handle form submission from the PMPro frontend login form.
+ * Process a login link request from the PMPro frontend login form.
  *
- * Injects a JS confirmation message in place of the form.
+ * The button posts to wp_login_url(), which PMPro points at its own login page, so
+ * the request arrives here rather than at wp-login.php. It runs on template_redirect,
+ * before any output, so pmpro_ml_set_browser_cookie() can still send its cookie.
+ * The result is stored for pmpro_ml_handle_frontend_login_submission() to show.
+ *
+ * @since TBD
+ *
+ * @return void
+ */
+function pmpro_ml_process_frontend_login_submission() {
+	global $pmpro_ml_frontend_link_sent;
+
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended -- nonce verified inside pmpro_ml_process_form_submission().
+	if ( ! isset( $_REQUEST['pmpro_login_form_used'], $_REQUEST['action'] ) || 'pmpro_magic_login' !== $_REQUEST['action'] ) {
+		return;
+	}
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+	$pmpro_ml_frontend_link_sent = pmpro_ml_process_form_submission();
+}
+add_action( 'template_redirect', 'pmpro_ml_process_frontend_login_submission' );
+
+/**
+ * Show the confirmation message after a login link request from the PMPro frontend login form.
+ *
+ * Injects a JS confirmation message in place of the form. The request itself is
+ * processed earlier by pmpro_ml_process_frontend_login_submission().
  *
  * @since 1.0
+ * @since TBD Only prints the message. The request is processed on template_redirect.
  *
  * @return void
  */
 function pmpro_ml_handle_frontend_login_submission() {
-	if ( isset( $_REQUEST['pmpro_login_form_used'] ) && pmpro_ml_process_form_submission() ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified inside pmpro_ml_process_form_submission()
+	global $pmpro_ml_frontend_link_sent;
+
+	if ( ! empty( $pmpro_ml_frontend_link_sent ) ) {
 		$login_url = function_exists( 'pmpro_login_url' ) ? pmpro_login_url() : wp_login_url();
 		?>
 		<script>
@@ -217,7 +246,7 @@ function pmpro_ml_process_form_submission() {
 
 	// Remember this browser so the link logs in without a click when opened here.
 	pmpro_ml_set_browser_cookie( $user_id );
-	$redirect_to = isset( $_REQUEST['redirect_to'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect_to'] ) ) : '';
+	$redirect_to = pmpro_ml_get_redirect_to();
 	$login_link  = add_query_arg( 'pmpro_magic_login_token', $login_token, home_url() );
 	if ( ! empty( $redirect_to ) ) {
 		$login_link = add_query_arg( 'redirect_to', rawurlencode( $redirect_to ), $login_link );
@@ -323,8 +352,7 @@ function pmpro_ml_authenticate_via_token() {
 
 	// Any other request that opens the link only shows the confirm button. The token is not used yet.
 	if ( ! $is_confirmed ) {
-		$redirect_to = isset( $_GET['redirect_to'] ) ? esc_url_raw( wp_unslash( $_GET['redirect_to'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- redirect_to is a standard WP parameter.
-		pmpro_ml_show_confirm_page( $token, $redirect_to );
+		pmpro_ml_show_confirm_page( $token, pmpro_ml_get_redirect_to() );
 	}
 
 	// Authenticate the user.
@@ -342,7 +370,7 @@ function pmpro_ml_authenticate_via_token() {
 	do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally firing the core wp_login action as part of the authentication flow.
 
 	// Determine redirect destination.
-	$redirect_to = isset( $_REQUEST['redirect_to'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect_to'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- redirect_to is a standard WP parameter; token verification above authenticates the request.
+	$redirect_to = pmpro_ml_get_redirect_to();
 
 	if ( function_exists( 'pmpro_login_redirect' ) ) {
 		$redirect_url = pmpro_login_redirect( $redirect_to, '', $user );
@@ -387,11 +415,23 @@ function pmpro_ml_show_confirm_page( $token, $redirect_to = '' ) {
 }
 
 /**
- * Name of the cookie that ties a login link to the browser that requested it.
+ * Get the redirect_to value from the current request.
+ *
+ * Used when building the login link, on the confirm page, and after logging in,
+ * so all three read it the same way. The confirm page sends it back in a hidden
+ * field, so it is read from $_REQUEST to cover both GET and POST.
  *
  * @since TBD
+ *
+ * @return string The sanitized redirect URL, or an empty string if not set.
  */
-define( 'PMPRO_MAGIC_LOGIN_BROWSER_COOKIE', 'pmpro_magic_login_browser' );
+function pmpro_ml_get_redirect_to() {
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended -- redirect_to is a standard WP parameter; callers verify the nonce or token.
+	$redirect_to = ( ! empty( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect_to'] ) ) : '';
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+	return $redirect_to;
+}
 
 /**
  * Remember the browser that requested a login link.
