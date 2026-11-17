@@ -214,6 +214,9 @@ function pmpro_ml_process_form_submission() {
 
 	// Generate token and build login link.
 	$login_token = pmpro_login_generate_login_token( $user_id );
+
+	// Remember this browser so the link logs in without a click when opened here.
+	pmpro_ml_set_browser_cookie( $user_id );
 	$redirect_to = isset( $_REQUEST['redirect_to'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect_to'] ) ) : '';
 	$login_link  = add_query_arg( 'pmpro_magic_login_token', $login_token, home_url() );
 	if ( ! empty( $redirect_to ) ) {
@@ -253,20 +256,41 @@ function pmpro_login_generate_login_token( $user_id ) {
 }
 
 /**
- * Validate the token from the URL, log the user in, and redirect.
+ * Validate the login token, then either show the confirm page or log the user in.
+ *
+ * When the member opens the emailed link in the same browser they requested it from,
+ * that browser carries the cookie set by pmpro_ml_set_browser_cookie() and the member
+ * is logged in right away.
+ *
+ * Any other request that opens the link (a different browser or device, or an email
+ * link scanner such as Microsoft Safe Links, which fetches every link in an email
+ * before the member sees it) only gets a "Log In" button, and the token stays unused.
+ * The token is used only when that button is submitted (a POST request). Scanners
+ * don't carry the cookie or submit forms, so they can no longer use up the token.
  *
  * @since 1.0
+ * @since TBD Opening the link without the requesting browser's cookie requires a button click (POST) to log in.
  *
  * @return void
  */
 function pmpro_ml_authenticate_via_token() {
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- magic login tokens are self-authenticating; a nonce is not applicable here.
-	if ( ! isset( $_GET['pmpro_magic_login_token'] ) || is_user_logged_in() ) {
+	if ( is_user_logged_in() ) {
 		return;
 	}
 
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- token is validated below against stored user meta.
-	$token = sanitize_text_field( wp_unslash( $_GET['pmpro_magic_login_token'] ) );
+	$request_method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
+
+	// phpcs:disable WordPress.Security.NonceVerification -- magic login tokens are self-authenticating; a nonce is not applicable here.
+	if ( 'POST' === $request_method && isset( $_POST['pmpro_magic_login_token'] ) ) {
+		$is_confirmed = true;
+		$token        = sanitize_text_field( wp_unslash( $_POST['pmpro_magic_login_token'] ) );
+	} elseif ( isset( $_GET['pmpro_magic_login_token'] ) ) {
+		$is_confirmed = false; // Set to true below when this is the browser that requested the link.
+		$token        = sanitize_text_field( wp_unslash( $_GET['pmpro_magic_login_token'] ) );
+	} else {
+		return;
+	}
+	// phpcs:enable WordPress.Security.NonceVerification
 
 	$user_query = new WP_User_Query( array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key,WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- querying by indexed token meta is required for token-based auth.
 		'meta_key'    => 'pmpro_magic_login_token', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
@@ -287,16 +311,30 @@ function pmpro_ml_authenticate_via_token() {
 	if ( time() > $expires ) {
 		delete_user_meta( $user_id, 'pmpro_magic_login_token' );
 		delete_user_meta( $user_id, 'pmpro_magic_login_expires' );
+		delete_user_meta( $user_id, 'pmpro_magic_login_browser' );
 		delete_transient( 'pmpro_ml_last_sent_' . $user_id );
 		wp_die( esc_html__( 'Login link has expired. Please request a new one.', 'pmpro-magic-login' ) );
+	}
+
+	// The browser that requested the link logs in on a plain GET, with no click.
+	if ( ! $is_confirmed && 'GET' === $request_method && pmpro_ml_browser_cookie_matches( $user_id ) ) {
+		$is_confirmed = true;
+	}
+
+	// Any other request that opens the link only shows the confirm button. The token is not used yet.
+	if ( ! $is_confirmed ) {
+		$redirect_to = isset( $_GET['redirect_to'] ) ? esc_url_raw( wp_unslash( $_GET['redirect_to'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- redirect_to is a standard WP parameter.
+		pmpro_ml_show_confirm_page( $token, $redirect_to );
 	}
 
 	// Authenticate the user.
 	wp_set_auth_cookie( $user_id, true, is_ssl() );
 
-	// Clean up the used token.
+	// Clean up the used token and the browser cookie.
 	delete_user_meta( $user_id, 'pmpro_magic_login_token' );
 	delete_user_meta( $user_id, 'pmpro_magic_login_expires' );
+	delete_user_meta( $user_id, 'pmpro_magic_login_browser' );
+	pmpro_ml_clear_browser_cookie();
 	delete_transient( 'pmpro_ml_sent_' . $user_id );
 	delete_transient( 'pmpro_ml_last_sent_' . $user_id );
 
@@ -320,6 +358,131 @@ function pmpro_ml_authenticate_via_token() {
 add_action( 'init', 'pmpro_ml_authenticate_via_token' );
 
 /**
+ * Show the "Log In" confirm page for a valid login link, then exit.
+ *
+ * Uses wp_die() with a 200 status so the page works with any theme, the same way
+ * WordPress shows its own "Are you sure?" confirm pages. wp_die() also sends
+ * no-cache headers, so page caches don't store the page.
+ *
+ * @since TBD
+ *
+ * @param string $token       The login token from the link.
+ * @param string $redirect_to Where to send the member after logging in, if set.
+ * @return void
+ */
+function pmpro_ml_show_confirm_page( $token, $redirect_to = '' ) {
+	$title = __( 'Log In', 'pmpro-magic-login' );
+
+	$message  = '<h1>' . esc_html( $title ) . '</h1>';
+	$message .= '<p>' . esc_html__( 'Click the button below to finish logging in.', 'pmpro-magic-login' ) . '</p>';
+	$message .= '<form method="post" action="' . esc_url( home_url( '/' ) ) . '">';
+	$message .= '<input type="hidden" name="pmpro_magic_login_token" value="' . esc_attr( $token ) . '" />';
+	if ( ! empty( $redirect_to ) ) {
+		$message .= '<input type="hidden" name="redirect_to" value="' . esc_attr( $redirect_to ) . '" />';
+	}
+	$message .= '<p><button type="submit" class="button button-large">' . esc_html( $title ) . '</button></p>';
+	$message .= '</form>';
+
+	wp_die( $message, esc_html( $title ), array( 'response' => 200 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- every part of $message is escaped above.
+}
+
+/**
+ * Name of the cookie that ties a login link to the browser that requested it.
+ *
+ * @since TBD
+ */
+define( 'PMPRO_MAGIC_LOGIN_BROWSER_COOKIE', 'pmpro_magic_login_browser' );
+
+/**
+ * Remember the browser that requested a login link.
+ *
+ * Sets a random cookie in the requesting browser and stores a hash of it on the
+ * user, so pmpro_ml_authenticate_via_token() can log the member in without a click
+ * when they open the link in that same browser. The cookie expires with the link.
+ *
+ * Does nothing if output has already started, since the cookie can't be sent then.
+ * The link still works; it just shows the confirm button.
+ *
+ * @since TBD
+ *
+ * @param int $user_id WordPress user ID the login link was generated for.
+ * @return void
+ */
+function pmpro_ml_set_browser_cookie( $user_id ) {
+	if ( headers_sent() ) {
+		delete_user_meta( $user_id, 'pmpro_magic_login_browser' );
+		return;
+	}
+
+	$key     = bin2hex( random_bytes( 32 ) );
+	$expires = (int) get_user_meta( $user_id, 'pmpro_magic_login_expires', true );
+
+	update_user_meta( $user_id, 'pmpro_magic_login_browser', hash( 'sha256', $key ) );
+
+	setcookie(
+		PMPRO_MAGIC_LOGIN_BROWSER_COOKIE,
+		$key,
+		array(
+			'expires'  => $expires,
+			'path'     => COOKIEPATH,
+			'domain'   => COOKIE_DOMAIN,
+			'secure'   => is_ssl(),
+			'httponly' => true,
+			'samesite' => 'Lax', // Sent when the member clicks the link in their email.
+		)
+	);
+}
+
+/**
+ * Check whether the current request comes from the browser that requested the user's login link.
+ *
+ * @since TBD
+ *
+ * @param int $user_id WordPress user ID the login link belongs to.
+ * @return bool
+ */
+function pmpro_ml_browser_cookie_matches( $user_id ) {
+	if ( empty( $_COOKIE[ PMPRO_MAGIC_LOGIN_BROWSER_COOKIE ] ) ) {
+		return false;
+	}
+
+	$stored_hash = (string) get_user_meta( $user_id, 'pmpro_magic_login_browser', true );
+	if ( '' === $stored_hash ) {
+		return false;
+	}
+
+	$key = sanitize_text_field( wp_unslash( $_COOKIE[ PMPRO_MAGIC_LOGIN_BROWSER_COOKIE ] ) );
+
+	return hash_equals( $stored_hash, hash( 'sha256', $key ) );
+}
+
+/**
+ * Remove the browser cookie once the login link has been used.
+ *
+ * @since TBD
+ *
+ * @return void
+ */
+function pmpro_ml_clear_browser_cookie() {
+	if ( headers_sent() || ! isset( $_COOKIE[ PMPRO_MAGIC_LOGIN_BROWSER_COOKIE ] ) ) {
+		return;
+	}
+
+	setcookie(
+		PMPRO_MAGIC_LOGIN_BROWSER_COOKIE,
+		'',
+		array(
+			'expires'  => time() - YEAR_IN_SECONDS,
+			'path'     => COOKIEPATH,
+			'domain'   => COOKIE_DOMAIN,
+			'secure'   => is_ssl(),
+			'httponly' => true,
+			'samesite' => 'Lax',
+		)
+	);
+}
+
+/**
  * Delete expired login tokens if there are any.
  *
  * Hooked to PMPro's quarter-hourly cron if available, otherwise uses the WP-Cron event registered on activation.
@@ -341,6 +504,7 @@ function pmpro_ml_cleanup_expired_tokens() {
 		$uid = $user->ID;
 		delete_user_meta( $uid, 'pmpro_magic_login_token' );
 		delete_user_meta( $uid, 'pmpro_magic_login_expires' );
+		delete_user_meta( $uid, 'pmpro_magic_login_browser' );
 		delete_transient( 'pmpro_ml_sent_' . $uid );
 		delete_transient( 'pmpro_ml_last_sent_' . $uid );
 	}
