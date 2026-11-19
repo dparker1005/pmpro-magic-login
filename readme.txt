@@ -4,7 +4,7 @@ Tags: paid memberships pro, pmpro, magic link, passwordless login
 Requires at least: 5.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,6 +21,10 @@ PMPro Magic Login extends Paid Memberships Pro to allow members to log in using 
 3. Paid Memberships Pro must be installed and activated.
 
 == Changelog ==
+
+= 1.0.3 - 2026-11-19 =
+* BUG FIX: Invalid, used, or expired login links now return a 4xx status instead of a 500 error. #4 (@sarah-savage)
+* BUG FIX: Email link scanners such as Microsoft Safe Links no longer use up login links. Opening a link in a different browser or device now shows a "Log In" button to finish logging in. #5 (@andrewlimaza)
 
 = 1.0.2 - 2026-09-11 =
 * BUG FIX: The "Email Me a Login Link" button is now rendered inside login forms built with `wp_login_form()`, such as the PMPro login page and login widget. The button previously printed above the form and discarded content other plugins added to the `login_form_middle` filter. #3 (@dparker1005)

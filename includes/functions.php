@@ -145,7 +145,7 @@ add_action( 'login_form_pmpro_magic_login', 'pmpro_ml_handle_wp_login_submission
  * before any output, so pmpro_ml_set_browser_cookie() can still send its cookie.
  * The result is stored for pmpro_ml_handle_frontend_login_submission() to show.
  *
- * @since TBD
+ * @since 1.0.3
  *
  * @return void
  */
@@ -169,7 +169,7 @@ add_action( 'template_redirect', 'pmpro_ml_process_frontend_login_submission' );
  * processed earlier by pmpro_ml_process_frontend_login_submission().
  *
  * @since 1.0
- * @since TBD Only prints the message. The request is processed on template_redirect.
+ * @since 1.0.3 Only prints the message. The request is processed on template_redirect.
  *
  * @return void
  */
@@ -298,7 +298,7 @@ function pmpro_login_generate_login_token( $user_id ) {
  * don't carry the cookie or submit forms, so they can no longer use up the token.
  *
  * @since 1.0
- * @since TBD Opening the link without the requesting browser's cookie requires a button click (POST) to log in.
+ * @since 1.0.3 Opening the link without the requesting browser's cookie requires a button click (POST) to log in.
  *
  * @return void
  */
@@ -392,7 +392,7 @@ add_action( 'init', 'pmpro_ml_authenticate_via_token' );
  * WordPress shows its own "Are you sure?" confirm pages. wp_die() also sends
  * no-cache headers, so page caches don't store the page.
  *
- * @since TBD
+ * @since 1.0.3
  *
  * @param string $token       The login token from the link.
  * @param string $redirect_to Where to send the member after logging in, if set.
@@ -421,7 +421,7 @@ function pmpro_ml_show_confirm_page( $token, $redirect_to = '' ) {
  * so all three read it the same way. The confirm page sends it back in a hidden
  * field, so it is read from $_REQUEST to cover both GET and POST.
  *
- * @since TBD
+ * @since 1.0.3
  *
  * @return string The sanitized redirect URL, or an empty string if not set.
  */
@@ -443,7 +443,7 @@ function pmpro_ml_get_redirect_to() {
  * Does nothing if output has already started, since the cookie can't be sent then.
  * The link still works; it just shows the confirm button.
  *
- * @since TBD
+ * @since 1.0.3
  *
  * @param int $user_id WordPress user ID the login link was generated for.
  * @return void
@@ -476,7 +476,7 @@ function pmpro_ml_set_browser_cookie( $user_id ) {
 /**
  * Check whether the current request comes from the browser that requested the user's login link.
  *
- * @since TBD
+ * @since 1.0.3
  *
  * @param int $user_id WordPress user ID the login link belongs to.
  * @return bool
@@ -499,7 +499,7 @@ function pmpro_ml_browser_cookie_matches( $user_id ) {
 /**
  * Remove the browser cookie once the login link has been used.
  *
- * @since TBD
+ * @since 1.0.3
  *
  * @return void
  */
