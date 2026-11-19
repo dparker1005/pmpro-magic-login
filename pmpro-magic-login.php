@@ -20,6 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 define( 'PMPRO_MAGIC_LOGIN_VERSION', '1.0.2' );
 define( 'PMPRO_MAGIC_LOGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PMPRO_MAGIC_LOGIN_URL', plugin_dir_url( __FILE__ ) );
+define( 'PMPRO_MAGIC_LOGIN_BROWSER_COOKIE', 'pmpro_magic_login_browser' ); // Ties a login link to the browser that requested it.
 
 /**
  * Check that Paid Memberships Pro is active, then load plugin files.
