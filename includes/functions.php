@@ -277,7 +277,7 @@ function pmpro_ml_authenticate_via_token() {
 
 	$users = $user_query->get_results();
 	if ( empty( $users ) ) {
-		wp_die( esc_html__( 'Invalid login link.', 'pmpro-magic-login' ) );
+		wp_die( esc_html__( 'Invalid login link.', 'pmpro-magic-login' ), '', array( 'response' => 403 ) );
 	}
 
 	$user    = $users[0];
@@ -288,7 +288,7 @@ function pmpro_ml_authenticate_via_token() {
 		delete_user_meta( $user_id, 'pmpro_magic_login_token' );
 		delete_user_meta( $user_id, 'pmpro_magic_login_expires' );
 		delete_transient( 'pmpro_ml_last_sent_' . $user_id );
-		wp_die( esc_html__( 'Login link has expired. Please request a new one.', 'pmpro-magic-login' ) );
+		wp_die( esc_html__( 'Login link has expired. Please request a new one.', 'pmpro-magic-login' ), '', array( 'response' => 410 ) );
 	}
 
 	// Authenticate the user.
