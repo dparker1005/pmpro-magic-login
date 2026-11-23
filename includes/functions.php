@@ -115,7 +115,7 @@ function pmpro_ml_handle_wp_login_submission() {
 		add_filter( 'wp_login_errors', function( $errors ) {
 			$errors->remove( 'empty_username' );
 			$errors->remove( 'empty_password' );
-			$errors->add( 'pmpro_magic_login_failed', '<strong>' . esc_html__( 'Error:', 'pmpro-magic-login' ) . '</strong> ' . esc_html__( 'Your login link request could not be processed. Please refresh the page and try again.', 'pmpro-magic-login' ) );
+			$errors->add( 'pmpro_magic_login_failed', '<strong>' . esc_html__( 'Error:', 'pmpro-magic-login' ) . '</strong> ' . esc_html__( 'Your login link request could not be processed. Please try again.', 'pmpro-magic-login' ) );
 			return $errors;
 		} );
 		return;
@@ -190,7 +190,7 @@ function pmpro_ml_handle_frontend_login_submission() {
 		jQuery(document).ready(function($) {
 			$('.pmpro_card_content').first().prepend(
 				'<div role="alert" class="pmpro_message pmpro_error" id="pmpro_magic_login_error">' +
-				'<?php echo esc_js( __( 'Your login link request could not be processed. Please refresh the page and try again.', 'pmpro-magic-login' ) ); ?>' +
+				'<?php echo esc_js( __( 'Your login link request could not be processed. Please try again.', 'pmpro-magic-login' ) ); ?>' +
 				'</div>'
 			);
 		});
