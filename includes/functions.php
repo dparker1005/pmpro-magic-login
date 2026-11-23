@@ -164,7 +164,7 @@ function pmpro_ml_process_frontend_login_submission() {
 add_action( 'template_redirect', 'pmpro_ml_process_frontend_login_submission' );
 
 /**
- * Show the confirmation message after a login link request from the PMPro frontend login form.
+ * Show the confirmation message after a login link request from a frontend login form.
  *
  * Injects a JS confirmation message in place of the form. The request itself is
  * processed earlier by pmpro_ml_process_frontend_login_submission().
