@@ -111,8 +111,12 @@ add_filter( 'login_form_middle', 'pmpro_ml_login_form_middle' );
 function pmpro_ml_handle_wp_login_submission() {
 	if ( pmpro_ml_process_form_submission() === false ) {
 		// Show why the request failed instead of wp-login.php's "password field is empty" error.
-		add_filter( 'wp_login_errors', function() {
-			return new WP_Error( 'pmpro_magic_login_failed', '<strong>' . esc_html__( 'Error:', 'pmpro-magic-login' ) . '</strong> ' . esc_html__( 'Your login link request could not be processed. Please refresh the page and try again.', 'pmpro-magic-login' ) );
+		// Other errors, such as a CAPTCHA or lockout notice from another plugin, are kept.
+		add_filter( 'wp_login_errors', function( $errors ) {
+			$errors->remove( 'empty_username' );
+			$errors->remove( 'empty_password' );
+			$errors->add( 'pmpro_magic_login_failed', '<strong>' . esc_html__( 'Error:', 'pmpro-magic-login' ) . '</strong> ' . esc_html__( 'Your login link request could not be processed. Please refresh the page and try again.', 'pmpro-magic-login' ) );
+			return $errors;
 		} );
 		return;
 	}
@@ -185,7 +189,7 @@ function pmpro_ml_handle_frontend_login_submission() {
 		<script>
 		jQuery(document).ready(function($) {
 			$('.pmpro_card_content').first().prepend(
-				'<div class="pmpro_message pmpro_error" id="pmpro_magic_login_error">' +
+				'<div role="alert" class="pmpro_message pmpro_error" id="pmpro_magic_login_error">' +
 				'<?php echo esc_js( __( 'Your login link request could not be processed. Please refresh the page and try again.', 'pmpro-magic-login' ) ); ?>' +
 				'</div>'
 			);
